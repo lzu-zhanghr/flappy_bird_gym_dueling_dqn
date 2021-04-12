@@ -1,6 +1,5 @@
 
 import torch
-import random
 from memory import Memory, ReFrame
 from torch import nn, optim
 from network import DeepNetWork

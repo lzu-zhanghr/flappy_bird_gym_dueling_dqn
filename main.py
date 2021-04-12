@@ -1,9 +1,5 @@
 
-
 from utils import preprocess, print_info
-import time
-from collections import deque
-
 import random
 import torch
 import flappy_bird_gym
