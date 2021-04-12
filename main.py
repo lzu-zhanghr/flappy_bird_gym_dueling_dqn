@@ -60,21 +60,20 @@ def paly_game():
                 states = states.to(device=agent.device)
                 next_states = next_states.to(device=agent.device)
                 q_eval = agent.eval_net(states)
-
+                q_target = q_eval.clone()
                 q_eval_next = agent.eval_net(next_states)
                 q_target_next = agent.target_net(next_states)
-                y = torch.empty([agent.batch_size])
-                outputs = torch.empty([agent.batch_size])
+
                 for i in range(0, agent.batch_size):
                     if dones[i]:
-                        y[i] = rewards[i]
+                        # y[i] = rewards[i]
+                        q_target[i][actions[i]] = rewards[i]
                     else:
                         action_index = torch.argmax(q_eval_next[i])
-                        y[i] = rewards[i] + agent.gamma * q_target_next[i][action_index]
-                    outputs[i] = q_eval[i][actions[i]]
+                        q_target[i][actions[i]] = rewards[i] + agent.gamma * q_target_next[i][action_index]
 
                 agent.optimizer.zero_grad()
-                loss = agent.loss(outputs, y)
+                loss = agent.loss(q_target, q_eval)
                 loss.backward()
                 agent.optimizer.step()
                 agent._save_model(time_step)
