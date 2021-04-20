@@ -1,38 +1,41 @@
 
 from utils import preprocess, print_info
 import random
+import time
 import torch
 import flappy_bird_gym
 from agent import DDqn
 
 train = True
-observe = 1000
-explore = 200000
-episode = 1000000
+observe = 5000
+explore = 100000
+episode = 5000
 
-def init_game():
+def init_agent():
 
     flappybird = flappy_bird_gym.make("FlappyBird-rgb-v0")
     agent = DDqn(mode = train)
-    time_step = 0
     obs = flappybird.reset()
     for i in range(7):
         agent.reframe.push_frame(preprocess(obs))
 
-    return obs, agent, time_step, flappybird
+    return obs, agent, flappybird
 
-def paly_game():
+def train_agent():
 
-    obs, agent, time_step, flappybird = init_game()
+    time_step = 0
+    obs, agent, flappybird = init_agent()
+
     for i in range(episode):
 
         state = torch.cat([agent.reframe.get_reframe(), preprocess(obs)], 1)
-
+        pre_score = 0
         while True:
 
-            if random.random() <= agent.epsilon and train:
+            if random.random() <= agent.epsilon:
                 print("----------Random Action----------")
-                action = flappybird.action_space.sample()
+                # action = flappybird.action_space.sample()
+                action = torch.randint(0, 2, [1])
             else:
                 q_eval = agent.eval_net(state.to(agent.device))
                 action = torch.argmax(q_eval, -1)
@@ -42,10 +45,17 @@ def paly_game():
             # time.sleep(1 / 30)
 
             score = info['score']
-            if score:
-                reward *= (score * 0.1)
+            if score and score == pre_score:
+                reward = ((score + 1) * 0.1)
+            elif score and score != pre_score:
+                reward = score + 1
+                pre_score = score
             else:
-                reward *=0.1
+                reward *= 0.1
+
+            if done:
+                reward = -1
+
             next_state = torch.cat([agent.reframe.get_reframe(), preprocess(next_obs)], 1)
             agent.reframe.push_frame(preprocess(next_obs))
             agent.memory.save_memory(state, action, reward, done, next_state)
@@ -59,13 +69,15 @@ def paly_game():
                 q_target = q_eval.clone()
                 q_eval_next = agent.eval_net(next_states)
                 q_target_next = agent.target_net(next_states)
-
+        
                 for i in range(0, agent.batch_size):
                     if dones[i]:
-                        # y[i] = rewards[i]
                         q_target[i][actions[i]] = rewards[i]
                     else:
                         action_index = torch.argmax(q_eval_next[i])
+                #nature DQN
+                #       q_target[i][actions[i]] = rewards[i] + agent.gamma * q_eval_next[i][action_index]
+                #double DQN
                         q_target[i][actions[i]] = rewards[i] + agent.gamma * q_target_next[i][action_index]
 
                 agent.optimizer.zero_grad()
@@ -94,9 +106,26 @@ def paly_game():
             state = next_state
             time_step += 1
 
+def play_game():
+
+    obs, agent, flappybird = init_agent()
+    state = torch.cat([agent.reframe.get_reframe(), preprocess(obs)], 1)
+    while True:
+        q_eval = agent.eval_net(state.to(agent.device))
+        action = torch.argmax(q_eval, -1)
+        next_obs, reward, done, info = flappybird.step(action)
+        flappybird.render()
+        time.sleep(1 / 30)
+        next_state = torch.cat([agent.reframe.get_reframe(), preprocess(next_obs)], 1)
+        agent.reframe.push_frame(preprocess(next_obs))
+        if done:
+            print('game over with score:', info['score'])
+            obs = flappybird.reset()
+        state = next_state
 
 if __name__ == '__main__':
-    paly_game()
+
+    train_agent() if train else play_game()
 
 
 
